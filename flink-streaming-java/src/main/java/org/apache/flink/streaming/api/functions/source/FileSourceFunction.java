@@ -54,7 +54,7 @@ public class FileSourceFunction<OUT> extends RichParallelSourceFunction<OUT> {
 	public void open(Configuration parameters) throws Exception {
 		StreamingRuntimeContext context = (StreamingRuntimeContext) getRuntimeContext();
 		this.provider = context.getInputSplitProvider();
-		
+
 		format.configure(parameters);
 		serializer = typeInfo.createSerializer(getRuntimeContext().getExecutionConfig());
 
@@ -119,16 +119,20 @@ public class FileSourceFunction<OUT> extends RichParallelSourceFunction<OUT> {
 
 	@Override
 	public void run(SourceContext<OUT> ctx) throws Exception {
-		while (isRunning) {
-			OUT nextElement = serializer.createInstance();
-			nextElement =  format.nextRecord(nextElement);
-			if (nextElement == null && splitIterator.hasNext()) {
-				format.open(splitIterator.next());
-				continue;
-			} else if (nextElement == null) {
-				break;
+		try {
+			while (isRunning) {
+				OUT nextElement = serializer.createInstance();
+				nextElement = format.nextRecord(nextElement);
+				if (nextElement == null && splitIterator.hasNext()) {
+					format.open(splitIterator.next());
+					continue;
+				} else if (nextElement == null) {
+					break;
+				}
+				ctx.collect(nextElement);
 			}
-			ctx.collect(nextElement);
+		} catch (NullPointerException e) {
+			isRunning = false;
 		}
 	}
 
