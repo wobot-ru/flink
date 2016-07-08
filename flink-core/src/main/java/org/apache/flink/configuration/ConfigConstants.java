@@ -257,7 +257,12 @@ public final class ConfigConstants {
 	 */
 	public static final String FS_STREAM_OPENING_TIMEOUT_KEY = "taskmanager.runtime.fs_timeout";
 
-	
+	/**
+	 * Whether to use the LargeRecordHandler when spilling.
+	 */
+	public static final String USE_LARGE_RECORD_HANDLER_KEY = "taskmanager.runtime.large-record-handler";
+
+
 	// -------- Common Resource Framework Configuration (YARN & Mesos) --------
 
 	/**
@@ -758,6 +763,11 @@ public final class ConfigConstants {
 	 */
 	public static final int DEFAULT_FS_STREAM_OPENING_TIMEOUT = 0;
 
+	/**
+	 * Whether to use the LargeRecordHandler when spilling.
+	 */
+	public static final boolean DEFAULT_USE_LARGE_RECORD_HANDLER = false;
+
 
 	// ------ Common Resource Framework Configuration (YARN & Mesos) ------
 
@@ -939,6 +949,15 @@ public final class ConfigConstants {
 
 	/** ZooKeeper default leader port. */
 	public static final int DEFAULT_ZOOKEEPER_LEADER_PORT = 3888;
+
+	// ----------------------------- Environment Variables ----------------------------
+
+	/** The environment variable name which contains the location of the configuration directory */
+	public static final String ENV_FLINK_CONF_DIR = "FLINK_CONF_DIR";
+
+	/** The environment variable name which contains the location of the lib folder */
+	public static final String ENV_FLINK_LIB_DIR = "FLINK_LIB_DIR";
+
 
 	/**
 	 * Not instantiable.

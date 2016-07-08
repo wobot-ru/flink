@@ -18,10 +18,10 @@
 
 package org.apache.flink.runtime.executiongraph.restart;
 
-import com.google.common.base.Preconditions;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.concurrent.duration.Duration;
@@ -41,7 +41,6 @@ public class FixedDelayRestartStrategy implements RestartStrategy {
 	private final int maxNumberRestartAttempts;
 	private final long delayBetweenRestartAttempts;
 	private int currentRestartAttempt;
-	private boolean disabled = false;
 
 	public FixedDelayRestartStrategy(
 		int maxNumberRestartAttempts,
@@ -61,7 +60,7 @@ public class FixedDelayRestartStrategy implements RestartStrategy {
 
 	@Override
 	public boolean canRestart() {
-		return !disabled && currentRestartAttempt < maxNumberRestartAttempts;
+		return currentRestartAttempt < maxNumberRestartAttempts;
 	}
 
 	@Override
@@ -82,11 +81,6 @@ public class FixedDelayRestartStrategy implements RestartStrategy {
 				return null;
 			}
 		}, executionGraph.getExecutionContext());
-	}
-
-	@Override
-	public void disable() {
-		disabled = true;
 	}
 
 	/**
