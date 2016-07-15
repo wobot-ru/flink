@@ -24,6 +24,9 @@ import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -39,22 +42,26 @@ import java.util.List;
 
 /**
  * {@link InputFormat} subclass that wraps the access for HTables.
- *
  */
-public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputSplit>{
+public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputSplit> {
 
 	private static final long serialVersionUID = 1L;
 
 	private static final Logger LOG = LoggerFactory.getLogger(TableInputFormat.class);
 
-	/** helper variable to decide whether the input is exhausted or not */
+	/**
+	 * helper variable to decide whether the input is exhausted or not
+	 */
 	private boolean endReached = false;
 
 	// TODO table and scan could be serialized when kryo serializer will be the default
+	protected transient Connection connection;
 	protected transient HTable table;
 	protected transient Scan scan;
 
-	/** HBase iterator wrapper */
+	/**
+	 * HBase iterator wrapper
+	 */
 	private ResultScanner rs;
 
 	private byte[] lastRow;
@@ -62,7 +69,9 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	// abstract methods allow for multiple table and scanners in the same job
 	protected abstract Scan getScanner();
+
 	protected abstract String getTableName();
+
 	protected abstract T mapResultToTuple(Result r);
 
 	/**
@@ -73,18 +82,23 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	 */
 	@Override
 	public void configure(Configuration parameters) {
+		LOG.info("Initializing HBaseConfiguration");
+		try {
+			//use files found in the classpath
+			this.connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
+		} catch (IOException e) {
+			LOG.error("Error instantiating a new HBase connection", e);
+		}
 		this.table = createTable();
 		this.scan = getScanner();
 	}
 
-	/** Create an {@link HTable} instance and set it into this format */
+	/**
+	 * Create an {@link HTable} instance and set it into this format
+	 */
 	private HTable createTable() {
-		LOG.info("Initializing HBaseConfiguration");
-		//use files found in the classpath
-		org.apache.hadoop.conf.Configuration hConf = HBaseConfiguration.create();
-
 		try {
-			return new HTable(hConf, getTableName());
+			return (HTable) connection.getTable(TableName.valueOf(getTableName()));
 		} catch (Exception e) {
 			LOG.error("Error instantiating a new HTable instance", e);
 		}
@@ -98,22 +112,22 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	@Override
 	public T nextRecord(T reuse) throws IOException {
-		if (this.rs == null){
+		if (this.rs == null) {
 			throw new IOException("No table result scanner provided!");
 		}
-		try{
+		try {
 			Result res = this.rs.next();
-			if (res != null){
+			if (res != null) {
 				scannedRows++;
 				lastRow = res.getRow();
 				return mapResultToTuple(res);
 			}
-		}catch (Exception e) {
+		} catch (Exception e) {
 			this.rs.close();
 			//workaround for timeout on scan
 			StringBuffer logMsg = new StringBuffer("Error after scan of ")
-					.append(scannedRows)
-					.append(" rows. Retry with a new scanner...");
+				.append(scannedRows)
+				.append(" rows. Retry with a new scanner...");
 			LOG.warn(logMsg.toString(), e);
 			this.scan.setStartRow(lastRow);
 			this.rs = table.getScanner(scan);
@@ -131,13 +145,13 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	@Override
 	public void open(TableInputSplit split) throws IOException {
-		if (split == null){
+		if (split == null) {
 			throw new IOException("Input split is null!");
 		}
-		if (table == null){
+		if (table == null) {
 			throw new IOException("No HTable provided!");
 		}
-		if (scan == null){
+		if (scan == null) {
 			throw new IOException("No Scan instance provided");
 		}
 
@@ -153,10 +167,13 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	@Override
 	public void close() throws IOException {
-		if(rs!=null){
+		if (connection != null) {
+			this.connection.close();
+		}
+		if (rs != null) {
 			this.rs.close();
 		}
-		if(table!=null){
+		if (table != null) {
 			this.table.close();
 		}
 		LOG.info("Closing split (scanned {} rows)", scannedRows);
@@ -185,16 +202,16 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 				continue;
 			}
 			//Finds the region on which the given row is being served
-			final String[] hosts = new String[] { regionLocation };
+			final String[] hosts = new String[]{regionLocation};
 
 			// determine if regions contains keys used by the scan
 			boolean isLastRegion = endKey.length == 0;
 			if ((scanWithNoLowerBound || isLastRegion || Bytes.compareTo(startRow, endKey) < 0) &&
-					(scanWithNoUpperBound || Bytes.compareTo(stopRow, startKey) > 0)) {
+				(scanWithNoUpperBound || Bytes.compareTo(stopRow, startKey) > 0)) {
 
 				final byte[] splitStart = scanWithNoLowerBound || Bytes.compareTo(startKey, startRow) >= 0 ? startKey : startRow;
 				final byte[] splitStop = (scanWithNoUpperBound || Bytes.compareTo(endKey, stopRow) <= 0)
-						&& !isLastRegion ? endKey : stopRow;
+					&& !isLastRegion ? endKey : stopRow;
 				int id = splits.size();
 				final TableInputSplit split = new TableInputSplit(id, hosts, table.getTableName(), splitStart, splitStop);
 				splits.add(split);
@@ -214,7 +231,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		String splitStartKey = splitStart.isEmpty() ? "-" : splitStart;
 		String splitStopKey = splitEnd.isEmpty() ? "-" : splitEnd;
 		String[] hostnames = split.getHostnames();
-		LOG.info("{} split [{}|{}|{}|{}]",action, splitId, hostnames, splitStartKey, splitStopKey);
+		LOG.info("{} split [{}|{}|{}|{}]", action, splitId, hostnames, splitStartKey, splitStopKey);
 	}
 
 	/**
@@ -230,10 +247,8 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	 * Override this method, if you want to bulk exclude regions altogether from M-R. By default, no region is excluded(
 	 * i.e. all regions are included).
 	 *
-	 * @param startKey
-	 *        Start key of the region
-	 * @param endKey
-	 *        End key of the region
+	 * @param startKey Start key of the region
+	 * @param endKey   End key of the region
 	 * @return true, if this region needs to be included as part of the input (default).
 	 */
 	private static boolean includeRegionInSplit(final byte[] startKey, final byte[] endKey) {
