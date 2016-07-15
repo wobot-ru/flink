@@ -167,14 +167,14 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	@Override
 	public void close() throws IOException {
-		if (connection != null) {
-			this.connection.close();
-		}
 		if (rs != null) {
 			this.rs.close();
 		}
 		if (table != null) {
 			this.table.close();
+		}
+		if (connection != null) {
+			this.connection.close();
 		}
 		LOG.info("Closing split (scanned {} rows)", scannedRows);
 		this.lastRow = null;
