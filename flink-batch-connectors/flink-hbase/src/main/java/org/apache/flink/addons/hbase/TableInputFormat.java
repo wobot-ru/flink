@@ -57,7 +57,6 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	// TODO table and scan could be serialized when kryo serializer will be the default
 	protected transient Connection connection;
-	//protected transient Table table;
 	protected transient Scan scan;
 
 	/**
@@ -88,9 +87,8 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 			//use files found in the classpath
 			this.connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
 		} catch (IOException e) {
-			LOG.error("Error instantiating a new HBase connection", e);
+			throw new RuntimeException("Error instantiating a new HBase connection", e);
 		}
-		//this.table = createTable();
 		this.scan = getScanner();
 	}
 
@@ -98,12 +96,17 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	 * Create an {@link Table} instance and set it into this format
 	 */
 	private Table createTable() {
+		LOG.info("Creating HBase Table");
 		try {
+			if (connection.isClosed()) {
+				LOG.info("ReCreating HBase connection");
+				this.connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
+			}
+
 			return connection.getTable(TableName.valueOf(getTableName()));
 		} catch (Exception e) {
-			LOG.error("Error instantiating a new HBase Table instance", e);
+			throw new RuntimeException("Error instantiating a new HBase Table instance", e);
 		}
-		return null;
 	}
 
 	@Override
@@ -150,9 +153,9 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		if (split == null) {
 			throw new IOException("Input split is null!");
 		}
-		/*if (table == null) {
-			throw new IOException("No Hbase Table provided!");
-		}*/
+		if (connection == null) {
+			throw new IOException("No HBase Connection provided!");
+		}
 		if (scan == null) {
 			throw new IOException("No Scan instance provided");
 		}
@@ -172,9 +175,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		if (rs != null) {
 			this.rs.close();
 		}
-		/*if (table != null) {
-			this.table.close();
-		}*/
+
 		if (connection != null) {
 			this.connection.close();
 		}
