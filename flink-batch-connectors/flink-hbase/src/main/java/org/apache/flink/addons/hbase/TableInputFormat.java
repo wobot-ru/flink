@@ -57,7 +57,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	// TODO table and scan could be serialized when kryo serializer will be the default
 	protected transient Connection connection;
-	protected transient Table table;
+	//protected transient Table table;
 	protected transient Scan scan;
 
 	/**
@@ -90,7 +90,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		} catch (IOException e) {
 			LOG.error("Error instantiating a new HBase connection", e);
 		}
-		this.table = createTable();
+		//this.table = createTable();
 		this.scan = getScanner();
 	}
 
@@ -131,7 +131,8 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 				.append(" rows. Retry with a new scanner...");
 			LOG.warn(logMsg.toString(), e);
 			this.scan.setStartRow(lastRow);
-			this.rs = table.getScanner(scan);
+
+			this.rs = createTable().getScanner(scan);
 			Result res = this.rs.next();
 			if (res != null) {
 				scannedRows++;
@@ -149,9 +150,9 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		if (split == null) {
 			throw new IOException("Input split is null!");
 		}
-		if (table == null) {
+		/*if (table == null) {
 			throw new IOException("No Hbase Table provided!");
-		}
+		}*/
 		if (scan == null) {
 			throw new IOException("No Scan instance provided");
 		}
@@ -161,7 +162,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		lastRow = split.getEndRow();
 		scan.setStopRow(lastRow);
 
-		this.rs = table.getScanner(scan);
+		this.rs = createTable().getScanner(scan);
 		this.endReached = false;
 		this.scannedRows = 0;
 	}
@@ -171,9 +172,9 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		if (rs != null) {
 			this.rs.close();
 		}
-		if (table != null) {
+		/*if (table != null) {
 			this.table.close();
-		}
+		}*/
 		if (connection != null) {
 			this.connection.close();
 		}
@@ -215,7 +216,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 				final byte[] splitStop = (scanWithNoUpperBound || Bytes.compareTo(endKey, stopRow) <= 0)
 					&& !isLastRegion ? endKey : stopRow;
 				int id = splits.size();
-				final TableInputSplit split = new TableInputSplit(id, hosts, table.getName().getName(), splitStart, splitStop);
+				final TableInputSplit split = new TableInputSplit(id, hosts, TableName.valueOf(getTableName()).getName(), splitStart, splitStop);
 				splits.add(split);
 			}
 		}
