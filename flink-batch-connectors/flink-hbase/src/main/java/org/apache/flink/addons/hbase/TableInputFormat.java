@@ -27,10 +27,11 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
@@ -41,7 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@link InputFormat} subclass that wraps the access for HTables.
+ * {@link InputFormat} subclass that wraps the access for HBase tables.
  */
 public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputSplit> {
 
@@ -56,7 +57,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 
 	// TODO table and scan could be serialized when kryo serializer will be the default
 	protected transient Connection connection;
-	protected transient HTable table;
+	protected transient Table table;
 	protected transient Scan scan;
 
 	/**
@@ -75,7 +76,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	protected abstract T mapResultToTuple(Result r);
 
 	/**
-	 * creates a {@link Scan} object and a {@link HTable} connection
+	 * creates a {@link Scan} object and a {@link Table} connection
 	 *
 	 * @param parameters
 	 * @see Configuration
@@ -94,13 +95,13 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	}
 
 	/**
-	 * Create an {@link HTable} instance and set it into this format
+	 * Create an {@link Table} instance and set it into this format
 	 */
-	private HTable createTable() {
+	private Table createTable() {
 		try {
-			return (HTable) connection.getTable(TableName.valueOf(getTableName()));
+			return connection.getTable(TableName.valueOf(getTableName()));
 		} catch (Exception e) {
-			LOG.error("Error instantiating a new HTable instance", e);
+			LOG.error("Error instantiating a new HBase Table instance", e);
 		}
 		return null;
 	}
@@ -149,7 +150,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 			throw new IOException("Input split is null!");
 		}
 		if (table == null) {
-			throw new IOException("No HTable provided!");
+			throw new IOException("No Hbase Table provided!");
 		}
 		if (scan == null) {
 			throw new IOException("No Scan instance provided");
@@ -183,7 +184,8 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 	@Override
 	public TableInputSplit[] createInputSplits(final int minNumSplits) throws IOException {
 		//Gets the starting and ending row keys for every region in the currently open table
-		final Pair<byte[][], byte[][]> keys = table.getStartEndKeys();
+		RegionLocator locator = connection.getRegionLocator(TableName.valueOf(getTableName()));
+		final Pair<byte[][], byte[][]> keys = locator.getStartEndKeys();
 		if (keys == null || keys.getFirst() == null || keys.getFirst().length == 0) {
 			throw new IOException("Expecting at least one region.");
 		}
@@ -196,7 +198,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 		for (int i = 0; i < keys.getFirst().length; i++) {
 			final byte[] startKey = keys.getFirst()[i];
 			final byte[] endKey = keys.getSecond()[i];
-			final String regionLocation = table.getRegionLocation(startKey, false).getHostnamePort();
+			final String regionLocation = locator.getRegionLocation(startKey, false).getHostnamePort();
 			//Test if the given region is to be included in the InputSplit while splitting the regions of a table
 			if (!includeRegionInSplit(startKey, endKey)) {
 				continue;
@@ -213,7 +215,7 @@ public abstract class TableInputFormat<T> extends RichInputFormat<T, TableInputS
 				final byte[] splitStop = (scanWithNoUpperBound || Bytes.compareTo(endKey, stopRow) <= 0)
 					&& !isLastRegion ? endKey : stopRow;
 				int id = splits.size();
-				final TableInputSplit split = new TableInputSplit(id, hosts, table.getTableName(), splitStart, splitStop);
+				final TableInputSplit split = new TableInputSplit(id, hosts, table.getName().getName(), splitStart, splitStop);
 				splits.add(split);
 			}
 		}
